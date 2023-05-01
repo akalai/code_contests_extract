@@ -1,8 +1,195 @@
+Installation and execution instructions below.
+
+# code_contests Converted format
+
+There are 3 converted files:
+1. code_contests_train.json.gz (3.9 GB compressed)
+2. code_contests_valid.json.gz  (26M compressed)
+3. code_contests_test.json.gz  (32M compressed)
+
+`code_contests_train.json.gz` contains about 13k problems:
+* Correct solutions:
+  * CPP: 1.7M
+  * Python3: 1.5M (each problem has many solutions!)
+  * Java: 0.9M
+* Incorrect solutions:
+  * CPP: 4.8M
+  * Python3: 1.7M
+  * Java: 1M
+
+I'm seeing around 2\% duplicates.
+
+To load the python-3 solutions,
+```
+import gzip
+import json
+from collections import Counter
+with gzip.open("code_contests_train.json.gz", "rt") as f:
+    problems = json.load(f)  # takes a while!
+correct_counts = Counter(lang for p in problems for lang in p["solutions"] for _ in p["solutions"][lang])
+print("Correct solutions by language:\n", correct_counts.most_common())
+incorrect_counts = Counter(lang for p in problems for lang in p["incorrect_solutions"] for _ in p["incorrect_solutions"][lang])
+print("Incorrect solutions by language:\n", incorrect_counts.most_common())
+```
+
+
+These are just gzipped json files, for train, validation, and test.
+
+Each problem has the following fields:
+* `name` - unique string id
+* `description` - string of contest problem description
+* `solutions` - dictionary mapping language to list of strings
+* `incorrect_solutions` - dictionary mapping language to incorrect solutions only, list of strings
+* `source` - string indicating where it came from. Counts:
+
+count  | source name 
+------ | ----------- 
+8,101  | CODEFORCES  
+2,151  | AIZU        
+1,323  | ATCODER     
+1,267  | HACKEREARTH 
+  768  | CODECHEF    
+
+* `is_description_translated`: True/False
+* `untranslated_description`: non-empty if the above is `True`
+* `cf_contest_id`: some kind of id within conetst  (if codeforces)?
+* `cf_index`: A-R but also A1, A2, empty string for non-codeforces (5513)
+* `cf_points`: `0.0`-`5250.0`, 0.0 for non-codeforces and also some codeforces (7,587)
+* `cf_rating`: 0, 800-3500, 1100 median, 1600 mode, 1109.1 mean
+* `cf_tags`: list of string tags
+* `difficulty`: weird string difficulty, looks like codeforces
+* `input_file`: rarely used
+* `output_file`: rarely used
+* `memory_limit_bytes`: for evaluation
+* `time_limit_seconds`: for evaluation
+* public_tests: list of `{"input": __, "output": __}`
+
+# Original Fields
+
+## `source` and `Source`
+
+number | source name | source value
+------ | ----------- | ------------
+8,101  | CODEFORCES  | 2
+2,151  | AIZU        | 7
+1,323  | ATCODER     | 6
+1,267  | HACKEREARTH | 3
+  768  | CODECHEF    | 1
+
+```python
+>>> pp.Source.items()
+[('UNKNOWN_SOURCE', 0), ('CODECHEF', 1), ('CODEFORCES', 2), ('HACKEREARTH', 3), ('CODEJAM', 4), ('ATCODER', 6), ('AIZU', 7)]
+```
+
+## `name`
+
+* unique string, use as id?
+
+## `is_description_translated`
+
+* True/False
+* 1,088 AIZU problems have it True, everything else False
+* These also have `.untranslated_description` field not equal to `''`
+
+
+## `cf_contest_id`
+
+* 0 if not codeforces (5513)
+* 5 is most common codeforces value (684*5 occurrences)
+
+## `cf_index`
+
+* A-R but also A1, A2
+* empty string for non-codeforces (5513)
+
+## `cf_points`
+
+* 0.0-5250.0
+* 0.0 for non-codeforces and also some codeforces (7,587)
+
+## `cf_rating` 0, 800-3500
+
+* 0 if not in codeforces or if no rating (5627)
+* 1100 median, 1600 mode, 1109.1 mean
+
+## `cf_tags`
+
+* `list(p.cf_tags)` is a list of tags for codeforces problems
+* many of them have an empty string in them, so ignore the empty strings
+
+
+## `difficulty` and `Difficulty`
+
+* difficulty is a key into the Difficulty enum
+
+```python
+>>> Counter(p.Difficulty.Name(p.difficulty) for p in problems).most_common()
+[('UNKNOWN_DIFFICULTY', 4742), ('B', 1399), ('C', 1398), ('A', 1395), ('D', 1390), ('E', 1359), ('F', 653), ('EXTERNAL', 359), ('MEDIUM', 265), ('G', 261), ('H', 105), ('HARD', 72), ('EASY', 67), ('I', 54), ('J', 32), ('K', 17), ('L', 15), ('M', 11), ('N', 6), ('HARDER', 5), ('O', 2), ('P', 1), ('Q', 1), ('R', 1)]
+```
+
+## `input_file`, `output_file`
+
+* 22 codeforces problems have a `input_file='input.txt'` and `output_file='output.txt'`
+* Not sure what they are, maybe ignore these?
+
+## `memory_limit_bytes`
+
+Median 256_000_000 = 256 MB
+
+## `description`
+
+* string of lenght 29-12,976 chars (median 1,637) 
+* super-short problems are all from AIZU which are just a couple of examples of input 
+
+## `time_limit`
+
+* Convert to a string 
+```python
+>>> Counter(p.time_limit.ToNanoseconds()/10**9 for p in problems).most_common(10)
+[(2.0, 5169), (1.0, 3580), (0.0, 2039), (3.0, 884), (8.0, 679), (4.0, 396), (5.0, 390), (1.5, 109), (6.0, 90), (2.5, 65)]
+```
+
+
+
+## public_tests, generated_tests, private_tests 
+
+* each test is an object that has a .input, .output
+
+```python
+def convert_tests(tests):
+  return [[t.input, t.output] for t in tests]
+```
+
+##  solutions, incorrect_solutions 
+
+* each solution has a .language and a .solution
+
+```python
+def convert_solutions(sols):
+  return [[s.Language.name(s.language), s.solution] for s in sols]
+```
+
+
+
+# Memory (compression 4x)
+
+memory 12GB when we read in all puzzles even though the dataset is 2.9GB 
+
+# EXECUTION
+
+To run, after the nightmare of installation below, you run: 
+
+```
+PYTHONINSPECT=1 bazel run --repo_env=CC=/usr/bin/clang -c opt :export /data/adam/code_contests/dm-code_contests
+```
+
+There is also a `PYTHON_ONLY` flag in the file if you just want that.
+
 # CodeContests
 
 CodeContests is a competitive programming dataset for machine-learning. This
 dataset was used when training
-[AlphaCode](https://deepmind.com/blog/article/Competitive-programming-with-AlphaCode). AlphaCode has been published in [Science](https://www.science.org/doi/10.1126/science.abq1158), with a preprint on [arXiv](https://arxiv.org/abs/2203.07814).
+[AlphaCode](https://deepmind.com/blog/article/Competitive-programming-with-AlphaCode).
 
 It consists of programming problems, from a variety of sources:
 
@@ -16,16 +203,6 @@ HackerEarth | https://www.hackerearth.com | [description2code](https://github.co
 
 Problems include test cases in the form of paired inputs and outputs, as well as
 both correct and incorrect human solutions in a variety of languages.
-
-## Install bazel
-
-First [install bazel](https://docs.bazel.build/versions/main/install.html)
-and verify it builds correctly (we only support Linux with clang, but other
-platforms might work):
-
-```sh
-bazel build -c opt :print_names_and_sources
-```
 
 ## Downloading the dataset
 
@@ -56,6 +233,21 @@ can print the source and name of each problem in the validation data by
 running:
 
 ```
+# Also maybe helpful: https://www.kaggle.com/code/usaiprashanth/finetuning
+
+# Install bazel: Use our custom APT repository # https://docs.bazel.build/versions/main/install-ubuntu.html#install-on-ubuntu
+sudo apt install apt-transport-https curl gnupg
+curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.gpg
+sudo mv bazel.gpg /etc/apt/trusted.gpg.d/
+echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | sudo tee /etc/apt/sources.list.d/bazel.list
+sudo apt update && sudo apt install bazel
+
+sudo apt-get install python-dev python2.7-dev
+
+sudo apt install clang
+
+bazel run --repo_env=CC=/usr/bin/clang -c opt :print_names_and_sources /datadrive/code_contests/dm-code_contests/code_contests_valid.riegeli 
+
 bazel run -c opt \
   :print_names_and_sources /tmp/dm-code_contests/code_contests_valid.riegeli
 ```
@@ -76,13 +268,8 @@ functionality, and can be run with e.g.
 
 ```
 bazel run -c opt execution:solve_example -- \
-  --valid_path=/tmp/dm-code_contests/code_contests_valid.riegeli
+  /tmp/dm-code_contests/code_contests_valid.riegeli
 ```
-
-Note, for the last command you should see one `Compilation failed` and two
-`Compilation succeeded`, if you see three `Compilation failed` then there is
-likely an issue with the Python version used, please install and try several
-ones before reporting a bug.
 
 The execution code defaults to using Python 3.9 and 2.7, located at
 `/usr/bin/python3.9` and `/usr/bin/python2.7`, with standard libraries at
@@ -95,62 +282,28 @@ bazel run -c opt execution:solve_example -- \
   --python3_path=/usr/bin/python3.10 --python3_library_paths=/usr/lib/python3.10
 ```
 
-In Debian/Ubuntu you can install specific Python versions with
-
-```
-sudo apt install python3.9 python3.10 python3.11
-```
-
-and you can check if you have some version installed by `which` provides output:
-
-```
-which python3.11
-```
-
-Note that the Python used for building with bazel and for executing inside the sandbox can be different.
-
-### Note on data and sandbox consistency
-
-The incorrect and correct solutions attached to problems are not guaranteed to compile and execute in the exact same way as in their original contest website (for example different compiler versions or flags or different library versions). Some of the solutions will fail compilation, or will produce sandbox violations, especially if they are incorrect.
-
-### FAQ
-
-We recommend running the following before reporting bugs, which wipes out the
-bazel state and sometimes fixes transient errors.
-
-```
-bazel clean --expunge
-rm -rf ~/.cache/bazel
-```
-
 ## Supported platforms
 
 This repository is supported on Linux, compiled with clang.
-
-People on MacOS have reported this error:
-https://github.com/deepmind/code_contests/issues/5
-
-Windows have reported this error:
-https://github.com/deepmind/code_contests/issues/9
 
 ## Citing this work
 
 If you use this dataset or code, please cite this paper:
 
 ```
-@article{
-  doi:10.1126/science.abq1158,
-  author = {Yujia Li  and David Choi  and Junyoung Chung  and Nate Kushman  and Julian Schrittwieser  and R{\'e}mi Leblond  and Tom Eccles  and James Keeling  and Felix Gimeno  and Agustin Dal Lago  and Thomas Hubert  and Peter Choy  and Cyprien de Masson d’Autume  and Igor Babuschkin  and Xinyun Chen  and Po-Sen Huang  and Johannes Welbl  and Sven Gowal  and Alexey Cherepanov  and James Molloy  and Daniel J. Mankowitz  and Esme Sutherland Robson  and Pushmeet Kohli  and Nando de Freitas  and Koray Kavukcuoglu  and Oriol Vinyals },
-  title = {Competition-level code generation with AlphaCode},
-  journal = {Science},
-  volume = {378},
-  number = {6624},
-  pages = {1092-1097},
-  year = {2022},
-  doi = {10.1126/science.abq1158},
-  URL = {https://www.science.org/doi/abs/10.1126/science.abq1158},
-  eprint = {https://www.science.org/doi/pdf/10.1126/science.abq1158},
-  abstract = {Programming is a powerful and ubiquitous problem-solving tool. Systems that can assist programmers or even generate programs themselves could make programming more productive and accessible. Recent transformer-based neural network models show impressive code generation abilities yet still perform poorly on more complex tasks requiring problem-solving skills, such as competitive programming problems. Here, we introduce AlphaCode, a system for code generation that achieved an average ranking in the top 54.3\% in simulated evaluations on recent programming competitions on the Codeforces platform. AlphaCode solves problems by generating millions of diverse programs using specially trained transformer-based networks and then filtering and clustering those programs to a maximum of just 10 submissions. This result marks the first time an artificial intelligence system has performed competitively in programming competitions. Computer programming competitions are popular tests among programmers that require critical thinking informed by experience and creating solutions to unforeseen problems, both of which are key aspects of human intelligence but challenging to mimic by machine learning models. Using self-supervised learning and an encoder-decoder transformer architecture, Li et al. developed AlphaCode, a deep-learning model that can achieve approximately human-level performance on the Codeforces platform, which regularly hosts these competitions and attracts numerous participants worldwide (see the Perspective by Kolter). The development of such coding platforms could have a huge impact on programmers’ productivity. It may even change the culture of programming by shifting human work to formulating problems, with machine learning being the main one responsible for generating and executing codes. —YS Modern machine learning systems can achieve average human-level performance in popular competitive programming contests.}}
+@article{li2022competition,
+  title={Competition-Level Code Generation with AlphaCode},
+    author={Li, Yujia and Choi, David and Chung, Junyoung and Kushman, Nate and
+    Schrittwieser, Julian and Leblond, R{\'e}mi and Eccles, Tom and
+    Keeling, James and Gimeno, Felix and Dal Lago, Agustin and
+    Hubert, Thomas and Choy, Peter and de Masson d'Autume, Cyprien and
+    Babuschkin, Igor and Chen, Xinyun and Huang, Po-Sen and Welbl, Johannes and
+    Gowal, Sven and Cherepanov, Alexey and Molloy, James and
+    Mankowitz, Daniel and Sutherland Robson, Esme and Kohli, Pushmeet and
+    de Freitas, Nando and Kavukcuoglu, Koray and Vinyals, Oriol},
+  journal={arXiv preprint arXiv:2203.07814},
+  year={2022}
+}
 ```
 
 ## License
